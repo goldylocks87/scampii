@@ -1,0 +1,37 @@
+[package]
+name = "scampii"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+description = "An animated pixel shrimp named scampii for your terminal :: supports iTerm2, Kitty, Sixel, and Unicode halfblock rendering"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/goldylocks87/scampii"
+homepage = "https://github.com/goldylocks87/scampii"
+readme = "README.md"
+keywords = ["terminal", "animation", "pixel-art", "shrimp", "scampii"]
+categories = ["command-line-utilities", "graphics", "visualization"]
+include = ["src/**"]
+
+[features]
+default = ["cli"]
+cli = ["clap"]
+
+[[bin]]
+name = "scampii"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[lib]
+name = "scampii"
+path = "src/lib.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"], optional = true }
+crossterm = "0.27"
+libc = "0.2"
+thiserror = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

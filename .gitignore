@@ -1,0 +1,15 @@
+# Rust build output
+/target/
+
+# rustfmt backup files
+*.rs.bk
+
+# IDE
+.idea/
+.local/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
