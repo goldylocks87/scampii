@@ -51,9 +51,9 @@ fn main() {
     );
 
     // The shrimp image at scale 1 is ~4 columns, halfblock is 24 columns.
-    let text_col: usize = if use_image { 8 } else { 26 };
-    let shrimp_offset: usize = 2;
-    let total_rows: usize = shrimp_offset + if use_image { 6 } else { 14 };
+    let text_col: usize = if use_image { 9 } else { 26 };
+    let shrimp_offset: usize = 3;
+    let total_rows: usize = shrimp_offset + if use_image { 8 } else { 14 };
 
     let mut out = BufWriter::new(stdout().lock());
     write!(out, "\x1b[?25l").unwrap();
@@ -92,7 +92,7 @@ fn main() {
         }
         if use_image {
             write!(out, "\x1b[1G").unwrap();
-            let _ = iterm.draw(&mut out, &FRAMES[frame_idx], &theme, 1);
+            let _ = iterm.draw(&mut out, &FRAMES[frame_idx], &theme, 2);
         } else {
             let mut tmp = Vec::new();
             let _ = halfblock.draw(&mut tmp, &FRAMES[frame_idx], &theme);

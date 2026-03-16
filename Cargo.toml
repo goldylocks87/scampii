@@ -1,8 +1,8 @@
 [package]
 name = "scampii"
-version = "0.1.0"
-edition = "2021"
-rust-version = "1.74"
+version = "0.1.2"
+edition = "2024"
+rust-version = "1.85"
 description = "An animated pixel shrimp named scampii for your terminal :: supports iTerm2, Kitty, Sixel, and Unicode halfblock rendering"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/goldylocks87/scampii"

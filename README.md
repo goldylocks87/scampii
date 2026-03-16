@@ -2,6 +2,11 @@
 
 An animated pixel-art shrimp for your terminal.
 
+## Sample
+
+![](examples/scampii.gif)
+![](examples/scampii-barbie.gif)
+
 ```
                                   ░░
                   ░░░░░░░░░░        ░░
@@ -31,11 +36,6 @@ An animated pixel-art shrimp for your terminal.
 
 Pixel-perfect animated shrimp with auto-detecting terminal image protocols.
 Falls back to Unicode half-blocks when no image protocol is available.
-
-## Sample
-
-![](examples/scampii.gif)
-![](examples/scampii-barbie.gif)
 
 ## Install
 
