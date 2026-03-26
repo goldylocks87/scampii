@@ -1,103 +1,99 @@
+<div align="center">
+
+<img src="examples/scampii.gif" alt="scampii" width="400">
+
 # scampii
 
 An animated pixel-art shrimp for your terminal.
 
-## Sample
+[![Crates.io](https://img.shields.io/crates/v/scampii)](https://crates.io/crates/scampii)
+[![docs.rs](https://docs.rs/scampii/badge.svg)](https://docs.rs/scampii)
+[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/scampii)](LICENSE-MIT)
+[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
 
-![](examples/scampii.gif)
-![](examples/scampii-barbie.gif)
+> Zero-dependency animated pixel art. One command, instant shrimp.
+> Works in iTerm2, VS Code, WezTerm, Ghostty, and Kitty.
 
-```
-                                  ░░
-                  ░░░░░░░░░░        ░░
-                ░░          ░░      ░░
-                ░░            ░░░░░░
-                ░░  ░░░░░░
-                  ░░████░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒
-    ▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░██▒▒░░░░▒▒▒▒▒▒▓▓▓▓████▒▒▒▒
-        ░░▒▒▒▒▒▒▓▓░░░░░░░░░░▒▒▓▓▓▓██████████▒▒▒▒
-            ░░▒▒▓▓▓▓░░░░░░▒▒▓▓▓▓▓▓▓▓▓▓▓▓████▓▓▒▒▒▒
-                ░░▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██▒▒▒▒▒▒
-                  ░░▒▒▓▓▒▒▓▓▒▒▓▓▒▒▓▓▒▒▓▓▓▓▓▓▒▒▓▓▒▒▒▒
-                    ░░░░▒▒▓▓▒▒▓▓▒▒▓▓▒▒▓▓░░▒▒▓▓██▓▓▒▒
-                  ░░    ░░░░░░░░░░░░░░░░▒▒▓▓▓▓██▓▓▒▒
-                ░░      ░░    ░░  ░░  ░░▒▒▒▒▓▓▓▓▒▒
-                      ░░    ░░    ░░    ░░░░▒▒▒▒▓▓▒▒
-                      ░░    ░░        ░░▒▒▒▒▓▓██▓▓▒▒
-                        ░░            ░░▒▒▓▓██▒▒▒▒
-                                  ░░░░▒▒▒▒▒▒▒▒▒▒
-                          ░░░░░░░░▒▒▒▒▓▓▒▒▒▒▒▒
-                            ▓▓▒▒░░▒▒▒▒▒▒▒▒
-                            ░░░░▒▒░░▒▒
-                              ▓▓░░▒▒░░
-                                ░░▓▓░░
-                                    ░░
-```
+</div>
 
-Pixel-perfect animated shrimp with auto-detecting terminal image protocols.
-Falls back to Unicode half-blocks when no image protocol is available.
-
-## Install
+## Quickstart
 
 ```bash
-cargo install scampii
-```
-
-## Run
-
-```bash
-scampii              # classic orange
-scampii ocean        # blue
-scampii barbie       # hot pink
-scampii ff00ff       # any hex color
-scampii --scale 2    # smaller pixels
-scampii -p halfblock # force character mode
+cargo install scampii && scampii
 ```
 
 Press any key to exit.
 
-## Use as a library
+## Usage
 
-The simplest API -- auto-detects protocol, manages frame cycling:
+```bash
+scampii              # classic orange, fullscreen animation
+scampii ocean        # blue
+scampii barbie       # hot pink
+scampii ff00ff       # any hex color
+scampii auto         # match terminal foreground color
+scampii --inline     # print one frame inline (acts like an emoji)
+```
+
+### Export PNG
+
+```bash
+scampii --emoji 128           # single frame, 128x128 emoji PNG
+scampii --emoji 128 ocean     # any theme
+scampii --png                 # all 3 animation frames
+scampii --png --emoji 128     # all 3 frames as emoji PNGs
+```
+
+## Library
 
 ```rust
 let mut anim = scampii::Animation::new(scampii::Theme::classic());
 let mut out = std::io::stdout();
 
-loop {
-    anim.draw(&mut out).unwrap();
+// Draw 30 frames (~3 seconds of animation)
+for _ in 0..30 {
+    anim.draw(&mut out).unwrap(); // zero-alloc: frames are pre-cached
     std::thread::sleep(std::time::Duration::from_millis(100));
 }
 ```
 
-With options:
+RGB tuples work too:
 
 ```rust
-let mut anim = scampii::Animation::new(scampii::Theme::preset("ocean").unwrap())
-    .scale(2)
-    .protocol(scampii::Protocol::Halfblock);
+let mut anim = scampii::Animation::new((0xFF, 0x00, 0x99));
 ```
 
 Custom theme:
 
 ```rust
-let mut anim = scampii::Animation::new(scampii::Theme::from_color(0xFF, 0x00, 0x99));
-anim.theme_mut().set_color(scampii::Hue::Antenna, 0xFF, 0x80, 0xCC);
+let mut theme = scampii::Theme::from_color(0xFF, 0x00, 0x99);
+theme.set_color(scampii::Hue::Antenna, 0xFF, 0x80, 0xCC);
+let mut anim = scampii::Animation::new(theme);
 ```
 
-For lower-level control, use `Renderer`, `ItermRenderer`, `KittyRenderer`, or
-`SixelRenderer` directly. See the [examples/](examples/) directory.
+Export a PNG:
 
-## Terminals
+```rust
+let data = scampii::png::render_emoji(
+    &scampii::FRAMES[0],
+    &scampii::Theme::classic(),
+    128,
+);
+std::fs::write("scampii.png", &data).unwrap();
+```
 
-| Protocol  | Terminals                        |
-| --------- | -------------------------------- |
-| iTerm2    | iTerm2, WezTerm, VS Code, Cursor |
-| Kitty     | Kitty, Ghostty                   |
-| Sixel     | foot, mlterm, xterm              |
-| Halfblock | Everything else                  |
+## Feature flags
 
-Auto-detected. Override with `--protocol` or `.protocol()`.
+| Flag  | Default | Description |
+|-------|---------|-------------|
+| `cli` | Yes     | Builds the `scampii` binary (adds `clap` dependency) |
+
+To use as a library without clap:
+
+```toml
+[dependencies]
+scampii = { version = "0.1", default-features = false }
+```
 
 ## Themes
 
@@ -115,16 +111,26 @@ Auto-detected. Override with `--protocol` or `.protocol()`.
 
 Or pass any hex color: `scampii c0ffee`
 
+## Terminals
+
+Renders via the iTerm2 inline image protocol (OSC 1337):
+
+- iTerm2
+- VS Code / Cursor
+- WezTerm
+- Ghostty
+- Kitty
+
 ## Environment
 
-| Variable        | Effect                 |
-| --------------- | ---------------------- |
-| `SCAMPII_COLOR` | Default color/theme    |
+| Variable        | Effect              |
+| --------------- | ------------------- |
+| `SCAMPII_COLOR` | Default color/theme |
 
 ## Requirements
 
-- Rust 1.74+
-- True-color terminal (24-bit)
+- **Rust 1.85+** (edition 2024)
+- True-color terminal with iTerm2 inline image support (OSC 1337)
 - macOS or Linux
 
 ## Contributing

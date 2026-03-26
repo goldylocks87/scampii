@@ -18,36 +18,25 @@ use crate::color::parse_osc_color;
 ///
 /// When this value is dropped it:
 /// 1. Shows the cursor.
-/// 2. Leaves the alternate screen (unless inline mode was used).
+/// 2. Leaves the alternate screen.
 /// 3. Disables raw mode.
 ///
 /// This runs on all exit paths including panics and early `?` returns.
 #[derive(Debug)]
 pub struct RawModeGuard {
-    /// When `true`, the alternate screen was never entered, so we must not
-    /// try to leave it on cleanup.
-    inline: bool,
+    _private: (),
 }
 
 impl RawModeGuard {
     /// Create a guard for the standard alternate-screen mode.
     pub fn alternate_screen() -> Self {
-        Self { inline: false }
-    }
-
-    /// Create a guard for inline mode (no alternate screen).
-    pub fn inline() -> Self {
-        Self { inline: true }
+        Self { _private: () }
     }
 }
 
 impl Drop for RawModeGuard {
     fn drop(&mut self) {
-        if self.inline {
-            let _ = execute!(stdout(), cursor::Show);
-        } else {
-            let _ = execute!(stdout(), cursor::Show, terminal::LeaveAlternateScreen);
-        }
+        let _ = execute!(stdout(), cursor::Show, terminal::LeaveAlternateScreen);
         let _ = terminal::disable_raw_mode();
     }
 }
@@ -111,6 +100,13 @@ impl SavedTermios {
     }
 }
 
+impl Drop for SavedTermios {
+    fn drop(&mut self) {
+        // Best-effort restore on all exit paths (including early returns/panics).
+        let _ = self.restore();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Foreground color query
 // ---------------------------------------------------------------------------
@@ -155,11 +151,8 @@ pub fn query_terminal_fg() -> Option<(u8, u8, u8)> {
         }
     }
 
-    // Restore original termios -- log failure since we can't propagate it
-    // from an Option-returning function without losing the parsed result.
-    if let Err(e) = saved.restore() {
-        eprintln!("scampii: failed to restore terminal state: {e}");
-    }
+    // `saved` restores termios on drop (including early returns above).
+    drop(saved);
 
     let response = std::str::from_utf8(&buf[..len]).ok()?;
     parse_osc_color(response)

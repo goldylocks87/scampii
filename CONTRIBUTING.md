@@ -29,17 +29,14 @@ All PRs must pass `cargo fmt --check`, `cargo clippy -- -D warnings`, and
 
 ```
 src/
-  lib.rs       -- Crate root, public re-exports (Hue, unpack_pixel, renderers)
-  main.rs      -- CLI (clap, optional via "cli" feature), protocol auto-detection
-  pixel.rs     -- [pub(crate)] Hue enum (16 palette slots), packed pixel encoding
-  frame.rs     -- Sprite data (3 animation frames), halfblock Renderer
+  lib.rs       -- Crate root, Animation (pre-cached inline PNG frames)
+  main.rs      -- CLI (clap, optional via "cli" feature)
+  pixel.rs     -- Hue enum (16 palette slots), packed pixel encoding
+  frame.rs     -- Sprite data (3 animation frames, 32x26 raw / 24x26 cropped)
   theme.rs     -- Named presets and HSB hue-shifting
-  color.rs     -- [pub(crate)] RGB/HSB math, hex and OSC color parsing
-  raster.rs    -- [pub(crate)] Frame-to-RGBA rasteriser, base64 encoder
-  iterm.rs     -- iTerm2 inline image protocol (ItermRenderer, PNG encoder)
-  kitty.rs     -- Kitty graphics protocol (KittyRenderer, chunked base64 RGBA)
-  sixel.rs     -- DEC Sixel protocol (SixelRenderer, RLE-compressed bands)
-  terminal.rs  -- RAII raw-mode guard, terminal foreground query
+  color.rs     -- RGB/HSB math, hex and OSC color parsing
+  png.rs       -- PNG encoder, rasteriser, base64, emoji export
+  terminal.rs  -- RAII raw-mode guard, terminal foreground color query
   error.rs     -- ScampiiError
 ```
 
@@ -60,33 +57,6 @@ Color themes are defined in `src/theme.rs` in the `Theme::preset` method.
    checks every name in `PRESET_NAMES` resolves to `Some`.
 
 That is it. `from_color` handles the HSB hue rotation automatically.
-
-## How to Add a New Rendering Protocol
-
-1. Create a new module `src/myprotocol.rs`.
-2. Implement a free function and a struct wrapper (see `iterm.rs` for the pattern):
-
-   ```rust
-   pub fn draw_myprotocol<Out: Write>(
-       buf: &mut Vec<u8>,    // reusable scratch buffer
-       out: &mut Out,        // output sink
-       frame: &PackedFrame,  // sprite frame data
-       theme: &Theme,        // resolved color LUT
-       scale: u8,            // pixel scale factor
-   ) -> Result<(), ScampiiError>
-
-   pub struct MyProtocolRenderer { buf: Vec<u8> }
-   // impl with fn draw(...) that delegates to draw_myprotocol
-   ```
-
-3. Use `raster::rasterise` if you need RGBA pixel data, or iterate the frame
-   directly with `unpack_pixel` for text-based protocols.
-4. Register the module in `src/lib.rs` (`pub mod myprotocol;`) and add a
-   re-export for the renderer struct.
-5. Add a variant to the `Protocol` enum in `src/main.rs` and wire it into the
-   `detect_protocol` function and the animation loop.
-6. Add tests. At minimum: a smoke test that renders frame 0 and checks the
-   output is non-empty and starts/ends with the expected escape sequences.
 
 ## PR Guidelines
 

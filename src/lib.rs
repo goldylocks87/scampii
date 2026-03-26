@@ -1,248 +1,165 @@
+#![warn(missing_docs)]
+
 //! # scampii
 //!
-//! An animated pixel-art scampii for your terminal.
+//! An animated pixel-art shrimp for your terminal.
 //!
-//! `scampii` renders a 24x26 pixel sprite as a looping animation with
-//! automatic terminal protocol detection. It supports pixel-perfect rendering
-//! via iTerm2, Kitty, and Sixel image protocols, with a half-block Unicode
-//! fallback for terminals that lack image support.
+//! Renders a 24x26 pixel sprite as a looping inline PNG animation via the
+//! iTerm2 image protocol (OSC 1337). Works in iTerm2, VS Code, Cursor,
+//! WezTerm, and any terminal supporting inline images.
 //!
-//! ## Quick start (binary)
-//!
-//! ```text
-//! scampii               # default scampii orange
-//! scampii ocean         # blue ocean theme
-//! scampii ff00ff        # any hex color
-//! scampii --inline      # no alternate screen
-//! scampii -p kitty      # force a specific protocol
-//! ```
-//!
-//! ## Library usage
-//!
-//! The simplest way — auto-detects protocol, manages frame cycling:
+//! ## Quick start
 //!
 //! ```rust,no_run
 //! let mut anim = scampii::Animation::new(scampii::Theme::classic());
 //! let mut out = std::io::stdout();
-//! anim.draw(&mut out).unwrap(); // renders next frame, advances automatically
+//!
+//! for _ in 0..30 {
+//!     anim.draw(&mut out).unwrap();
+//!     std::thread::sleep(std::time::Duration::from_millis(100));
+//! }
 //! ```
 //!
-//! For more control, use the renderers directly:
-//!
-//! ```rust,no_run
-//! use scampii::{Theme, Renderer, FRAMES};
-//!
-//! let theme = Theme::classic();
-//! let mut renderer = Renderer::new();
-//! let mut out = std::io::stdout();
-//! renderer.draw(&mut out, &FRAMES[0], &theme).unwrap();
-//! ```
-//!
-//! ## Custom themes
-//!
-//! Themes shift scampii's 10-step body palette to any target hue while
-//! preserving eye colors (pupil, iris, white, ring).
+//! ## Themes
 //!
 //! ```rust
 //! use scampii::Theme;
 //!
 //! let magenta = Theme::from_color(0xFF, 0x00, 0xFF);
 //! let ocean = Theme::preset("ocean").unwrap();
-//! let classic = Theme::classic();
 //! ```
+//!
+//! ## Utilities
+//!
+//! - [`parse_hex_color`]: Parse `"ff6600"` or `"#ff6600"` into `(u8, u8, u8)`.
+//! - [`png`]: Export frames as PNG files or emoji-sized images.
 
 pub(crate) mod color;
-pub mod error;
-pub mod frame;
-pub mod iterm;
-pub mod kitty;
+pub(crate) mod error;
+pub(crate) mod frame;
 pub(crate) mod pixel;
-pub mod raster;
-pub mod sixel;
-pub mod terminal;
+pub mod png;
+pub(crate) mod terminal;
 pub mod theme;
 
-// Re-export the most commonly used types at the crate root.
 pub use color::parse_hex_color;
 pub use error::ScampiiError;
-pub use frame::{PackedFrame, Renderer, FRAMES, FRAME_COUNT, FRAME_HEIGHT, FRAME_WIDTH};
-pub use iterm::ItermRenderer;
-pub use kitty::KittyRenderer;
+pub use frame::{PackedFrame, FRAMES, FRAME_COUNT};
 pub use pixel::{unpack_pixel, Hue};
-pub use raster::MAX_SCALE;
-pub use sixel::SixelRenderer;
 pub use terminal::{query_terminal_fg, RawModeGuard};
 pub use theme::Theme;
 
 // ---------------------------------------------------------------------------
-// Animation (high-level API)
+// Animation
 // ---------------------------------------------------------------------------
 
-/// High-level animated shrimp — auto-detects protocol, manages frame cycling.
+/// Animated scampii -- pre-renders all frames at construction, zero-alloc draw.
 ///
-/// This is the simplest way to use scampii. Create an `Animation`, then call
-/// `draw()` in a loop. Frame cycling and protocol selection are handled for you.
+/// # Example
 ///
 /// ```rust,no_run
 /// let mut anim = scampii::Animation::new(scampii::Theme::classic());
 /// let mut out = std::io::stdout();
+///
 /// loop {
 ///     anim.draw(&mut out).unwrap();
 ///     std::thread::sleep(std::time::Duration::from_millis(100));
 /// }
 /// ```
+///
+/// Any [`Theme`] or `(r, g, b)` tuple works:
+///
+/// ```rust,no_run
+/// let mut anim = scampii::Animation::new(scampii::Theme::from((0xFF, 0x00, 0x99)));
+/// ```
 pub struct Animation {
-    theme: Theme,
-    protocol: Protocol,
-    scale: u8,
+    /// Pre-built iTerm2 escape payloads for each frame (PNG + base64 + OSC 1337).
+    frames: Vec<Vec<u8>>,
     frame_idx: usize,
-    halfblock: Renderer,
-    iterm: ItermRenderer,
-    kitty: KittyRenderer,
-    sixel: SixelRenderer,
+    theme: Theme,
+    cell_scale: u8,
 }
 
 impl Animation {
     /// Create a new animation with the given theme.
     ///
-    /// Auto-detects the best protocol for the current terminal.
-    /// Default scale is 4.
-    pub fn new(theme: Theme) -> Self {
-        Self {
-            theme,
-            protocol: detect_protocol(),
-            scale: 4,
-            frame_idx: 0,
-            halfblock: Renderer::new(),
-            iterm: ItermRenderer::new(),
-            kitty: KittyRenderer::new(),
-            sixel: SixelRenderer::new(),
-        }
-    }
-
-    /// Set the pixel scale factor for image protocols (1..=16).
+    /// Accepts anything that converts into a [`Theme`] -- a `Theme` value,
+    /// an `(r, g, b)` tuple, or a preset name via [`Theme::preset`].
     ///
-    /// Has no effect in halfblock mode. Default is 4.
+    /// Pre-renders all frames as base64-encoded PNGs wrapped in the iTerm2
+    /// inline image escape sequence. The [`draw`](Self::draw) hot loop does
+    /// zero allocation.
+    pub fn new(theme: impl Into<Theme>) -> Self {
+        let theme = theme.into();
+        let mut anim = Self {
+            frames: Vec::new(),
+            frame_idx: 0,
+            theme,
+            cell_scale: 1,
+        };
+        anim.rebuild_frames();
+        anim
+    }
+
+    /// Set the display scale in character cells. Default is 1.
+    ///
+    /// At scale 1 the shrimp is 2 cells wide and 1 cell tall.
+    /// At scale 4 it is 8 cells wide and 4 cells tall.
+    /// Scales with terminal zoom just like text.
     pub fn scale(mut self, scale: u8) -> Self {
-        self.scale = scale;
+        self.cell_scale = scale.max(1);
+        self.rebuild_frames();
         self
     }
 
-    /// Force a specific rendering protocol instead of auto-detecting.
-    pub fn protocol(mut self, protocol: Protocol) -> Self {
-        self.protocol = protocol;
-        self
+    fn rebuild_frames(&mut self) {
+        let w = 2 * self.cell_scale as u16;
+        let h = self.cell_scale as u16;
+        self.frames = FRAMES
+            .iter()
+            .map(|frame| {
+                let png_data = png::render_png(frame, &self.theme, self.cell_scale.max(1) * 2);
+                let mut payload = Vec::with_capacity(png_data.len() * 4 / 3 + 128);
+                let header = format!(
+                    "\x1b]1337;File=inline=1;width={w};height={h};preserveAspectRatio=1:"
+                );
+                payload.extend_from_slice(header.as_bytes());
+                png::base64_encode(&png_data, &mut payload);
+                payload.push(0x07);
+                payload
+            })
+            .collect();
     }
 
-    /// Access the theme (e.g. to call `set_color`).
-    pub fn theme_mut(&mut self) -> &mut Theme {
-        &mut self.theme
-    }
-
-    /// Render the next frame and advance the animation.
+    /// Render the next frame inline and advance the animation.
+    ///
+    /// This is a single `write_all` + `flush` -- no encoding, no allocation.
     pub fn draw<Out: std::io::Write>(&mut self, out: &mut Out) -> Result<(), ScampiiError> {
-        let frame = &FRAMES[self.frame_idx];
-        match self.protocol {
-            Protocol::Iterm => self.iterm.draw(out, frame, &self.theme, self.scale)?,
-            Protocol::Kitty => self.kitty.draw(out, frame, &self.theme, self.scale)?,
-            Protocol::Sixel => self.sixel.draw(out, frame, &self.theme, self.scale)?,
-            Protocol::Halfblock => self.halfblock.draw(out, frame, &self.theme)?,
-        }
+        out.write_all(&self.frames[self.frame_idx])?;
+        out.flush()?;
         self.frame_idx = (self.frame_idx + 1) % FRAME_COUNT;
         Ok(())
+    }
+
+    /// Current frame index (0..[`FRAME_COUNT`]).
+    pub fn frame_index(&self) -> usize {
+        self.frame_idx
+    }
+
+    /// Reset the animation to frame 0.
+    pub fn reset(&mut self) {
+        self.frame_idx = 0;
     }
 }
 
 impl std::fmt::Debug for Animation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Animation")
-            .field("protocol", &self.protocol)
-            .field("scale", &self.scale)
             .field("frame_idx", &self.frame_idx)
+            .field(
+                "payload_sizes",
+                &self.frames.iter().map(|f| f.len()).collect::<Vec<_>>(),
+            )
             .finish()
     }
-}
-
-// ---------------------------------------------------------------------------
-// Protocol detection
-// ---------------------------------------------------------------------------
-
-/// Supported rendering protocols for terminal image output.
-///
-/// Use [`detect_protocol`] to automatically select the best protocol for the
-/// current terminal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Protocol {
-    /// iTerm2 inline image protocol (OSC 1337).
-    Iterm,
-    /// Kitty graphics protocol.
-    Kitty,
-    /// DEC Sixel graphics.
-    Sixel,
-    /// Half-block character fallback (works in any true-color terminal).
-    Halfblock,
-}
-
-impl std::str::FromStr for Protocol {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "iterm" | "iterm2" => Ok(Self::Iterm),
-            "kitty" => Ok(Self::Kitty),
-            "sixel" => Ok(Self::Sixel),
-            "halfblock" | "half-block" | "unicode" | "fallback" => Ok(Self::Halfblock),
-            _ => Err(format!(
-                "unknown protocol '{s}' (valid: iterm, kitty, sixel, halfblock)"
-            )),
-        }
-    }
-}
-
-impl std::fmt::Display for Protocol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Iterm => f.write_str("iterm"),
-            Self::Kitty => f.write_str("kitty"),
-            Self::Sixel => f.write_str("sixel"),
-            Self::Halfblock => f.write_str("halfblock"),
-        }
-    }
-}
-
-/// Auto-detect the best rendering protocol for the current terminal.
-///
-/// Checks `VSCODE_CWD`, `TERM_PROGRAM`, and `TERM` environment variables.
-/// Falls back to [`Protocol::Halfblock`] when no image protocol is detected.
-pub fn detect_protocol() -> Protocol {
-    // VS Code / Cursor set VSCODE_* env vars but often leave TERM_PROGRAM empty.
-    // Both support the iTerm2 inline image protocol (OSC 1337).
-    if std::env::var_os("VSCODE_CWD").is_some() {
-        return Protocol::Iterm;
-    }
-
-    let term_program = std::env::var("TERM_PROGRAM");
-    let term_program = term_program.as_deref().unwrap_or("");
-
-    match term_program {
-        "iTerm.app" => return Protocol::Iterm,
-        "WezTerm" => return Protocol::Iterm,
-        "kitty" => return Protocol::Kitty,
-        "ghostty" => return Protocol::Kitty,
-        "vscode" => return Protocol::Iterm,
-        "Apple_Terminal" => return Protocol::Halfblock,
-        _ => {}
-    }
-
-    // Only check $TERM if TERM_PROGRAM didn't identify the terminal.
-    if term_program.is_empty() {
-        match std::env::var("TERM").as_deref() {
-            Ok(t) if t.starts_with("foot") || t.starts_with("mlterm") => {
-                return Protocol::Sixel;
-            }
-            _ => {}
-        }
-    }
-
-    Protocol::Halfblock
 }
