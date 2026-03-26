@@ -83,12 +83,6 @@ hue_variants! {
     EyeRing  : rgb( 14,  12,  12), alias(_E), packed(16);
 }
 
-impl std::fmt::Display for Hue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 // Compile-time assertion: packed values must fit in u8.
 const _: () = assert!(HUE_COUNT <= 255, "Too many Hue variants for u8 packing");
 
@@ -126,10 +120,16 @@ impl Hue {
     }
 }
 
+impl std::fmt::Display for Hue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 /// Decode a packed pixel byte into `Option<Hue>`.
 ///
 /// `0` maps to `None` (transparent). `1..=HUE_COUNT` maps to the corresponding
-/// variant in [`ALL_HUES`].
+/// variant in `ALL_HUES`.
 #[inline]
 pub const fn unpack_pixel(byte: u8) -> Option<Hue> {
     if byte == 0 || byte as usize > HUE_COUNT {

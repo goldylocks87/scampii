@@ -11,14 +11,15 @@ use crate::pixel::{Hue, ALL_HUES, HUE_COUNT};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Theme {
     /// Color for each [`Hue`] variant, indexed by `hue as usize`.
-    ///
-    /// Library consumers can read this directly for bulk pixel processing
-    /// without per-pixel method call overhead. Use [`Theme::color`] for
-    /// single lookups.
-    pub lut: [(u8, u8, u8); HUE_COUNT],
+    pub(crate) lut: [(u8, u8, u8); HUE_COUNT],
 }
 
 impl Theme {
+    /// All recognized preset names.
+    pub const PRESET_NAMES: &[&str] = &[
+        "classic", "ocean", "forest", "neon", "gold", "ice", "lava", "midnight", "barbie",
+    ];
+
     /// HSB shift -- rotates the scampii palette to match a target color.
     pub fn from_color(r: u8, g: u8, b: u8) -> Self {
         let (tgt_h, _tgt_s, _tgt_b) = rgb_to_hsb(r, g, b);
@@ -69,11 +70,6 @@ impl Theme {
             _ => None,
         }
     }
-
-    /// All recognized preset names.
-    pub const PRESET_NAMES: &[&str] = &[
-        "classic", "ocean", "forest", "neon", "gold", "ice", "lava", "midnight", "barbie",
-    ];
 
     /// Look up the resolved RGB color for a given hue.
     #[inline]

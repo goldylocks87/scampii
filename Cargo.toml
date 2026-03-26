@@ -3,14 +3,15 @@ name = "scampii"
 version = "0.1.2"
 edition = "2024"
 rust-version = "1.85"
-description = "An animated pixel shrimp named scampii for your terminal :: supports iTerm2, Kitty, Sixel, and Unicode halfblock rendering"
+description = "An animated pixel-art shrimp for your terminal"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/goldylocks87/scampii"
 homepage = "https://github.com/goldylocks87/scampii"
 readme = "README.md"
-keywords = ["terminal", "animation", "pixel-art", "shrimp", "scampii"]
+documentation = "https://docs.rs/scampii"
+keywords = ["terminal", "animation", "pixel-art", "ascii-art", "cli"]
 categories = ["command-line-utilities", "graphics", "visualization"]
-include = ["src/**"]
+include = ["src/**", "examples/**", "LICENSE-*", "README.md", "CHANGELOG.md"]
 
 [features]
 default = ["cli"]
@@ -29,7 +30,6 @@ path = "src/lib.rs"
 clap = { version = "4", features = ["derive", "env"], optional = true }
 crossterm = "0.27"
 libc = "0.2"
-thiserror = "2"
 
 [profile.release]
 lto = true
